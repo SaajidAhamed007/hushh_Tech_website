@@ -32,8 +32,14 @@ export default createHandler({
     });
 
     // ExecuteDeleteAccount returns { status, body }
-    // Manually set status and return body for response
-    res.status(result.status);
+    // For non-2xx responses, throw error so createHandler respects the status code
+    if (result.status < 200 || result.status >= 300) {
+      const error = new Error(result.body.error || "Account deletion failed");
+      error.statusCode = result.status;
+      throw error;
+    }
+
+    // For 2xx responses, return the body (status will be 200)
     return result.body;
   },
 });
