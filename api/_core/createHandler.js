@@ -25,17 +25,29 @@ export function createHandler({
 
       // Step 4: Handle validation errors properly
       if (error instanceof ZodError) {
-        return errorResponse(res, error.message, 400);
+        return errorResponse(res, "Invalid request payload", 400);
       }
 
       // Step 5: Handle timeout errors
       if (error.message === "Request timed out") {
-        return errorResponse(res, error.message, 408);
+        return errorResponse(res, "Request timeout", 408);
       }
 
       // Step 6: Preserve custom status codes from handlers
       if (error.statusCode && error.statusCode >= 400 && error.statusCode < 600) {
-        return errorResponse(res, error.message, error.statusCode);
+        // Log full error for debugging
+        console.error(`API Error [${error.statusCode}]:`, error);
+        // Return generic message based on status code
+        const statusMessages = {
+          400: "Invalid request",
+          401: "Unauthorized",
+          403: "Forbidden",
+          404: "Not found",
+          409: "Conflict",
+          422: "Unprocessable entity",
+        };
+        const message = statusMessages[error.statusCode] || "Request failed";
+        return errorResponse(res, message, error.statusCode);
       }
 
       // Step 7: Handle common HTTP error patterns
@@ -51,10 +63,12 @@ export function createHandler({
         return errorResponse(res, "Forbidden", 403);
       }
 
-      // Step 8: Generic fallback
+      // Step 8: Generic fallback for unexpected errors
+      // Log the full error for debugging purposes
+      console.error("Internal Server Error:", error);
       return errorResponse(
         res,
-        error.message || "Internal Server Error",
+        "Internal Server Error",
         500
       );
     }

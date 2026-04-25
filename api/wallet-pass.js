@@ -25,10 +25,20 @@ const resolvePayload = (body) => {
 };
 
 export default async function handler(req, res) {
+  // Separate try...catch for schema validation (returns 400)
+  let body;
   try {
-    // Validate input using schema
-    const body = walletPassSchema.parse(req.body);
-    
+    body = walletPassSchema.parse(req.body);
+  } catch (error) {
+    return res.status(400).json({
+      success: false,
+      error: "Invalid request payload.",
+      statusCode: 400,
+    });
+  }
+
+  // Separate try...catch for business logic (returns 500)
+  try {
     const payload = resolvePayload(body);
     if (!payload || typeof payload !== "object") {
       return res.status(400).json({
@@ -75,7 +85,7 @@ export default async function handler(req, res) {
     console.error("Wallet pass error:", error);
     return res.status(500).json({
       success: false,
-      error: error.message || "Wallet pass generation failed",
+      error: "Wallet pass generation failed",
       statusCode: 500,
     });
   }

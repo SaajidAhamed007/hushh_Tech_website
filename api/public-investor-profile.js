@@ -156,16 +156,21 @@ export const buildPublicInvestorProfilePayload = (
 };
 
 export default createHandler({
-  schema: publicInvestorProfileSchema,
+  // Schema is removed from config as it validates the body, which is not used in GET.
+  // Instead, we manually parse and validate the slug from query parameters.
   timeout: 5000,
-  handler: async ({ body, req, res }) => {
-    // Extract slug from query parameters
-    const slug = typeof req.query?.slug === "string" ? req.query.slug.trim() : body?.slug || "";
-
-    if (!slug) {
-      const error = new Error("Missing required slug");
-      error.statusCode = 400;
-      throw error;
+  handler: async ({ req, res }) => {
+    // Manually parse and validate the slug from query parameters
+    let slug;
+    try {
+      const validated = publicInvestorProfileSchema.parse({
+        slug: req.query?.slug,
+      });
+      slug = validated.slug;
+    } catch (error) {
+      const validationError = new Error("Invalid or missing slug parameter");
+      validationError.statusCode = 400;
+      throw validationError;
     }
 
     const supabase = getServiceClient();
@@ -179,7 +184,10 @@ export default createHandler({
       .maybeSingle();
 
     if (profileError) {
-      throw new Error(profileError.message);
+      console.error("Database error fetching profile:", profileError);
+      const error = new Error("Failed to fetch profile");
+      error.statusCode = 500;
+      throw error;
     }
 
     if (!profileRow) {
@@ -197,7 +205,10 @@ export default createHandler({
       .maybeSingle();
 
     if (onboardingError && onboardingError.code !== "PGRST116") {
-      throw new Error(onboardingError.message);
+      console.error("Database error fetching onboarding data:", onboardingError);
+      const error = new Error("Failed to fetch profile data");
+      error.statusCode = 500;
+      throw error;
     }
 
     res.setHeader("Cache-Control", "no-store");

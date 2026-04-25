@@ -412,7 +412,8 @@ export default async function handler(req, res) {
     const validated = googleWalletPassSchema.parse(req.body);
     body = validated;
   } catch (error) {
-    return res.status(400).json({ error: error.message });
+    console.error("Google Wallet validation error:", error);
+    return res.status(400).json({ error: "Invalid request payload" });
   }
 
   try {
