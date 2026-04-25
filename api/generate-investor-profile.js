@@ -2,6 +2,8 @@
  * Serverless function to generate investor profile using OpenAI GPT-4o API
  * This runs server-side to avoid CORS issues and keep API keys secure
  */
+import { createHandler } from "./_core/createHandler.js";
+import { generateInvestorProfileSchema } from "./schemas/generate-investor-profile.schema.js";
 
 const SYSTEM_PROMPT = `You are an assistant that PRE-FILLS an INVESTOR PROFILE from minimal information.
 
@@ -99,40 +101,19 @@ const PROFILE_SCHEMA = {
   }
 };
 
-export default async function handler(req, res) {
-  // Set CORS headers
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
-  res.setHeader(
-    'Access-Control-Allow-Headers',
-    'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization'
-  );
-
-  // Handle preflight request
-  if (req.method === 'OPTIONS') {
-    res.status(200).end();
-    return;
-  }
-
-  // Only allow POST requests
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed. Use POST.' });
-  }
-
-  try {
-    const { input, context } = req.body;
-
-    // Validate input
-    if (!input || !context) {
-      return res.status(400).json({ error: 'Missing required fields: input and context' });
-    }
+export default createHandler({
+  schema: generateInvestorProfileSchema,
+  timeout: 30000, // GPT-4o can take time
+  handler: async ({ body }) => {
+    const { input, context } = body;
 
     // Get OpenAI API key from environment
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
       console.error('OPENAI_API_KEY not configured');
-      return res.status(500).json({ error: 'OpenAI API key not configured on server' });
+      const error = new Error('OpenAI API key not configured on server');
+      error.statusCode = 500;
+      throw error;
     }
 
     // Separate financial_context from derived_context if present
@@ -180,9 +161,9 @@ export default async function handler(req, res) {
     if (!response.ok) {
       const errorText = await response.text();
       console.error('OpenAI API error:', response.status, errorText);
-      return res.status(response.status).json({ 
-        error: `OpenAI API failed: ${errorText}` 
-      });
+      const error = new Error(`OpenAI API failed: ${errorText}`);
+      error.statusCode = response.status;
+      throw error;
     }
 
     const data = await response.json();
@@ -190,7 +171,9 @@ export default async function handler(req, res) {
 
     if (!content) {
       console.error('Empty response from GPT-4o');
-      return res.status(500).json({ error: 'Empty response from OpenAI GPT-4o' });
+      const error = new Error('Empty response from OpenAI GPT-4o');
+      error.statusCode = 500;
+      throw error;
     }
 
     // Parse and validate response
@@ -203,21 +186,15 @@ export default async function handler(req, res) {
 
     if (missingFields.length > 0) {
       console.error('Missing fields in AI response:', missingFields);
-      return res.status(500).json({ 
-        error: `Missing required fields in AI response: ${missingFields.join(', ')}` 
-      });
+      const error = new Error(`Missing required fields in AI response: ${missingFields.join(', ')}`);
+      error.statusCode = 500;
+      throw error;
     }
 
     // Return successful response
-    return res.status(200).json({ 
+    return { 
       success: true,
       profile 
-    });
-
-  } catch (error) {
-    console.error('Error generating investor profile:', error);
-    return res.status(500).json({ 
-      error: error.message || 'Failed to generate investor profile' 
-    });
-  }
-}
+    };
+  },
+});

@@ -1,15 +1,10 @@
-// Vercel Serverless Function for Email Notifications
-// Works with Gmail SMTP (Node.js compatible)
+// Email Notifications Service
+// Sends email notifications for profile views and payments
 
 import nodemailer from 'nodemailer';
 import { createClient } from '@supabase/supabase-js';
-
-// CORS headers
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
-};
+import { createHandler } from './_core/createHandler.js';
+import { sendEmailNotificationSchema } from './schemas/send-email-notification.schema.js';
 
 function createSupabaseAdminClient() {
   const supabaseUrl = process.env.SUPABASE_URL?.trim();
@@ -51,18 +46,11 @@ async function resolvePublicProfileOwner(slug) {
   };
 }
 
-export default async function handler(req, res) {
-  // Handle CORS preflight
-  if (req.method === 'OPTIONS') {
-    return res.status(200).json({ ok: true });
-  }
-
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
-  try {
-    const { type, slug, profileOwnerEmail, profileName, testEmail } = req.body;
+export default createHandler({
+  schema: sendEmailNotificationSchema,
+  timeout: 10000, // Email operations need more time
+  handler: async ({ body, res }) => {
+    const { type, slug, profileOwnerEmail, profileName, testEmail } = body;
 
     // Configure Gmail transporter
     const transporter = nodemailer.createTransport({
@@ -72,6 +60,11 @@ export default async function handler(req, res) {
         pass: process.env.GMAIL_APP_PASSWORD,
       },
     });
+
+    // CORS headers
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
     // Test mode: Send test email
     if (testEmail) {
@@ -90,12 +83,7 @@ export default async function handler(req, res) {
         `,
       });
 
-      return res.status(200).json({ success: true, message: 'Test email sent!' });
-    }
-
-    // Validate required fields
-    if (!type || !slug) {
-      return res.status(400).json({ error: 'Missing required fields' });
+      return { success: true, message: 'Test email sent!' };
     }
 
     let resolvedOwnerEmail = profileOwnerEmail || '';
@@ -184,12 +172,6 @@ export default async function handler(req, res) {
       html,
     });
 
-    return res.status(200).json({ success: true, emailSent: true });
-  } catch (error) {
-    console.error('Email error:', error);
-    return res.status(500).json({ 
-      error: error.message || 'Failed to send email',
-      details: error.toString()
-    });
-  }
-}
+    return { success: true, emailSent: true };
+  },
+});

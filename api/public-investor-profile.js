@@ -1,4 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
+import { createHandler } from "./_core/createHandler.js";
+import { publicInvestorProfileSchema } from "./schemas/public-investor-profile.schema.js";
 
 const getServiceClient = () => {
   const supabaseUrl = process.env.SUPABASE_URL?.trim();
@@ -153,19 +155,19 @@ export const buildPublicInvestorProfilePayload = (
   };
 };
 
-export default async function handler(req, res) {
-  if (req.method !== "GET") {
-    return res.status(405).json({ error: "Method not allowed" });
-  }
+export default createHandler({
+  schema: publicInvestorProfileSchema,
+  timeout: 5000,
+  handler: async ({ body, req, res }) => {
+    // Extract slug from query parameters
+    const slug = typeof req.query?.slug === "string" ? req.query.slug.trim() : body?.slug || "";
 
-  const slug =
-    typeof req.query?.slug === "string" ? req.query.slug.trim() : "";
+    if (!slug) {
+      const error = new Error("Missing required slug");
+      error.statusCode = 400;
+      throw error;
+    }
 
-  if (!slug) {
-    return res.status(400).json({ error: "Missing required slug" });
-  }
-
-  try {
     const supabase = getServiceClient();
     const { data: profileRow, error: profileError } = await supabase
       .from("investor_profiles")
@@ -181,7 +183,9 @@ export default async function handler(req, res) {
     }
 
     if (!profileRow) {
-      return res.status(404).json({ error: "Profile not found or is private" });
+      const error = new Error("Profile not found or is private");
+      error.statusCode = 404;
+      throw error;
     }
 
     const { data: onboardingRow, error: onboardingError } = await supabase
@@ -197,14 +201,7 @@ export default async function handler(req, res) {
     }
 
     res.setHeader("Cache-Control", "no-store");
-    return res
-      .status(200)
-      .json(buildPublicInvestorProfilePayload(profileRow, onboardingRow));
-  } catch (error) {
-    console.error("public-investor-profile route error:", error);
-    return res.status(500).json({
-      error: "Failed to load public investor profile",
-      detail: error instanceof Error ? error.message : "Unknown error",
-    });
-  }
-}
+    return buildPublicInvestorProfilePayload(profileRow, onboardingRow);
+  },
+});
+

@@ -16,6 +16,9 @@ COPY package.json package-lock.json ./
 # Install ALL dependencies (including devDependencies needed for build)
 RUN npm ci
 
+# Copy validation script for environment checks
+COPY scripts/validate-env.js scripts/
+
 # Copy source code needed for build
 COPY index.html vite.config.ts tsconfig.json tsconfig.app.json tsconfig.node.json ./
 COPY postcss.config.js tailwind.config.js ./
@@ -46,6 +49,9 @@ ARG VITE_N8N_WEBHOOK_URL
 ARG VITE_OPENAI_API_KEY
 ARG VITE_VOICE_AGENT_URL
 
+# Validate required environment variables before build
+RUN node scripts/validate-env.js || true
+
 # Run build (skips tests in Docker — tests run in CI before Docker build)
 RUN npx vite build && node scripts/generate-sitemap.js && node scripts/generate-robots.js
 
@@ -66,6 +72,7 @@ COPY --from=builder /app/dist/ dist/
 # Copy server and API routes
 COPY server.js ./
 COPY api/ api/
+COPY scripts/validate-env.js scripts/
 
 # Cloud Run expects port 8080
 ENV PORT=8080
@@ -77,5 +84,5 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
   CMD wget -qO- http://localhost:8080/ || exit 1
 
-# Start the Express server
-CMD ["node", "server.js"]
+# Start the Express server with environment validation
+CMD ["sh", "-c", "node scripts/validate-env.js && node server.js"]

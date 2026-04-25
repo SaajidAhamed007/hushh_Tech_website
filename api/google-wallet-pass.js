@@ -1,4 +1,6 @@
 import { createSign } from "crypto";
+import { createHandler } from "./_core/createHandler.js";
+import { googleWalletPassSchema } from "./schemas/google-wallet-pass.schema.js";
 import {
   buildWalletCardContentFromPayload,
   getWalletPayloadFieldValue,
@@ -388,54 +390,78 @@ const getGoogleWalletHealth = async () => {
 };
 
 export default async function handler(req, res) {
+  // Handle GET requests for health check
   if (req.method === "GET") {
-    const health = await getGoogleWalletHealth();
-    return res.status(200).json(health);
+    try {
+      const health = await getGoogleWalletHealth();
+      return res.status(200).json(health);
+    } catch (error) {
+      console.error('google-wallet-pass health check error:', error);
+      return res.status(500).json({ error: 'Health check failed' });
+    }
   }
 
+  // Handle POST requests with createHandler
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  const payload = resolvePayload(req.body);
-  if (!payload || typeof payload !== "object") {
-    return res.status(400).json({ error: "Invalid wallet pass payload" });
-  }
-
-  const localConfig = getLocalGoogleWalletConfig();
-
-  if (localConfig) {
-    try {
-      const result = await createLocalGoogleWalletPass(payload, localConfig);
-      return res.status(200).json(result);
-    } catch (error) {
-      console.error("google-wallet-pass local error:", error);
-      return res.status(500).json({
-        error: "Google Wallet pass generation failed",
-        detail: getGoogleErrorMessage(error),
-      });
-    }
+  // Parse and validate body
+  let body;
+  try {
+    const validated = googleWalletPassSchema.parse(req.body);
+    body = validated;
+  } catch (error) {
+    return res.status(400).json({ error: error.message });
   }
 
   try {
-    const forward = await forwardGoogleWalletPass(payload);
-
-    if (!forward.ok) {
-      return res.status(forward.status).json(forward.body);
+    const payload = resolvePayload(body);
+    if (!payload || typeof payload !== "object") {
+      return res.status(400).json({ error: "Invalid wallet pass payload" });
     }
 
-    if (forward.contentType?.includes("application/json")) {
-      return res.status(forward.status).json(forward.body);
+    const localConfig = getLocalGoogleWalletConfig();
+
+    if (localConfig) {
+      try {
+        const result = await createLocalGoogleWalletPass(payload, localConfig);
+        return res.status(200).json(result);
+      } catch (error) {
+        console.error("google-wallet-pass local error:", error);
+        return res.status(500).json({
+          error: "Google Wallet pass generation failed",
+          detail: getGoogleErrorMessage(error),
+        });
+      }
     }
 
-    res.setHeader("Content-Type", forward.contentType);
-    res.setHeader("Content-Disposition", forward.contentDisposition);
-    return res.status(forward.status).send(forward.body);
+    try {
+      const forward = await forwardGoogleWalletPass(payload);
+
+      if (!forward.ok) {
+        return res.status(forward.status).json(forward.body);
+      }
+
+      if (forward.contentType?.includes("application/json")) {
+        return res.status(forward.status).json(forward.body);
+      }
+
+      res.setHeader("Content-Type", forward.contentType);
+      res.setHeader("Content-Disposition", forward.contentDisposition);
+      return res.status(forward.status).send(forward.body);
+    } catch (error) {
+      console.error("google-wallet-pass proxy error:", error);
+      return res.status(500).json({
+        error: "Proxy failed",
+        detail: error?.message || GOOGLE_WALLET_UNAVAILABLE_MESSAGE,
+      });
+    }
   } catch (error) {
-    console.error("google-wallet-pass proxy error:", error);
+    console.error("google-wallet-pass handler error:", error);
     return res.status(500).json({
-      error: "Proxy failed",
-      detail: error?.message || GOOGLE_WALLET_UNAVAILABLE_MESSAGE,
+      error: "Request processing failed",
+      detail: error instanceof Error ? error.message : "Unknown error",
     });
   }
 }

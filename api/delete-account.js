@@ -1,30 +1,39 @@
+/**
+ * Delete Account Endpoint
+ * Handles secure account deletion with authorization validation
+ * Requires Authorization header with valid auth token
+ */
+
+import { createHandler } from './_core/createHandler.js';
+import { deleteAccountSchema } from './schemas/delete-account.schema.js';
 import {
   createDeleteAccountAdminClientFromEnv,
   executeDeleteAccount,
 } from "./delete-account-service.js";
 
-export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
-  }
+export default createHandler({
+  schema: deleteAccountSchema,
+  timeout: 30000, // Account deletion is a heavy operation (30s)
+  handler: async ({ body, req, res }) => {
+    // Get authorization header (can be Authorization or authorization)
+    const authHeader = req.headers?.authorization || req.headers?.Authorization || null;
+    
+    if (!authHeader) {
+      const error = new Error('Authorization header is required');
+      error.statusCode = 401;
+      throw error;
+    }
 
-  try {
     const { adminClient, auditSecret } = createDeleteAccountAdminClientFromEnv();
     const result = await executeDeleteAccount({
       adminClient,
-      authHeader: req.headers?.authorization || req.headers?.Authorization || null,
+      authHeader,
       auditSecret,
     });
 
-    return res.status(result.status).json(result.body);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error("delete-account route error:", message);
-
-    return res.status(500).json({
-      success: false,
-      error: "Server configuration error",
-      details: message,
-    });
-  }
-}
+    // ExecuteDeleteAccount returns { status, body }
+    // Manually set status and return body for response
+    res.status(result.status);
+    return result.body;
+  },
+});

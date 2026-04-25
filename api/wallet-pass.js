@@ -1,3 +1,11 @@
+/**
+ * Apple Wallet Pass Proxy
+ * Forwards requests to upstream wallet service and returns pkpass binary file
+ */
+
+import { createHandler } from './_core/createHandler.js';
+import { walletPassSchema } from './schemas/wallet-pass.schema.js';
+
 const UPSTREAM_APPLE_WALLET_ENDPOINT =
   "https://hushh-wallet.vercel.app/api/passes/universal/create";
 
@@ -14,17 +22,15 @@ const resolvePayload = (body) => {
   return body;
 };
 
-export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
-  }
+export default createHandler({
+  schema: walletPassSchema,
+  timeout: 15000, // Wallet generation can take time
+  handler: async ({ body, res }) => {
+    const payload = resolvePayload(body);
+    if (!payload || typeof payload !== "object") {
+      throw new Error('Invalid wallet pass payload');
+    }
 
-  const payload = resolvePayload(req.body);
-  if (!payload || typeof payload !== "object") {
-    return res.status(400).json({ error: "Invalid wallet pass payload" });
-  }
-
-  try {
     const forward = await fetch(UPSTREAM_APPLE_WALLET_ENDPOINT, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -33,7 +39,10 @@ export default async function handler(req, res) {
 
     if (!forward.ok) {
       const text = await forward.text();
-      return res.status(forward.status).json({ error: "Wallet pass generation failed", detail: text });
+      const error = new Error(`Wallet pass generation failed (${forward.status})`);
+      error.statusCode = forward.status;
+      error.details = text;
+      throw error;
     }
 
     const buffer = Buffer.from(await forward.arrayBuffer());
@@ -42,6 +51,7 @@ export default async function handler(req, res) {
     const passSerial = forward.headers.get("x-pass-serial");
     const passType = forward.headers.get("x-pass-type");
 
+    // Set response headers for binary file
     res.setHeader(
       "Content-Type",
       forward.headers.get("content-type") || "application/vnd.apple.pkpass"
@@ -49,9 +59,11 @@ export default async function handler(req, res) {
     res.setHeader("Content-Disposition", contentDisposition);
     if (passSerial) res.setHeader("X-Pass-Serial", passSerial);
     if (passType) res.setHeader("X-Pass-Type", passType);
+
+    // Return buffer directly (Express will send it)
     res.status(200).send(buffer);
-  } catch (error) {
-    console.error("wallet-pass proxy error:", error);
-    res.status(500).json({ error: "Proxy failed", detail: error?.message });
-  }
-}
+    
+    // Signal successful response to prevent automatic JSON response
+    return null;
+  },
+});

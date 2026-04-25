@@ -1,12 +1,6 @@
 import { parsePhoneNumberFromString } from "libphonenumber-js";
-
-const REQUIRED_FIELDS = [
-  "name",
-  "email",
-  "age",
-  "phone_country_code",
-  "phone_number",
-];
+import { createHandler } from "./_core/createHandler.js";
+import { enrichPreferencesSchema, enrichPreferencesResponseSchema } from "./schemas/enrich-preferences.schema.js";
 
 const DEFAULT_COUNTRY = "US";
 const DEFAULT_CURRENCY = "USD";
@@ -133,17 +127,6 @@ function buildSchema() {
   };
 }
 
-function validatePayload(payload) {
-  const missing = REQUIRED_FIELDS.find((key) => payload[key] === undefined || payload[key] === null || payload[key] === "");
-  if (missing) {
-    return `Missing required field: ${missing}`;
-  }
-  if (typeof payload.age !== "number" || Number.isNaN(payload.age)) {
-    return "Age must be a number";
-  }
-  return null;
-}
-
 function normalizeBudget(budgetPerNight) {
   if (!budgetPerNight) return budgetPerNight;
   const min = typeof budgetPerNight.min === "number" ? budgetPerNight.min : 0;
@@ -155,23 +138,15 @@ function normalizeBudget(budgetPerNight) {
   };
 }
 
-export default async function handler(request, response) {
-  if (request.method !== "POST") {
-    return response.status(405).json({ error: "Method not allowed" });
-  }
-
-  try {
-    const body = typeof request.body === "string" ? JSON.parse(request.body || "{}") : request.body || {};
-    const validationError = validatePayload(body);
-    if (validationError) {
-      return response.status(400).json({ error: validationError });
-    }
-
+export default createHandler({
+  schema: enrichPreferencesSchema,
+  timeout: 15000, // OpenAI + geo lookup
+  handler: async ({ body }) => {
     const { name, email, age, phone_country_code, phone_number, organisation = null } = body;
     const geo = await deriveGeoHints(phone_country_code, phone_number);
 
     if (!process.env.OPENAI_API_KEY) {
-      return response.status(500).json({ error: "OPENAI_API_KEY is not configured" });
+      throw new Error("OPENAI_API_KEY is not configured");
     }
 
     const systemPrompt = `
@@ -222,15 +197,18 @@ Rules:
     if (!aiResponse.ok) {
       const errorText = await aiResponse.text();
       console.error("OpenAI error:", aiResponse.status, errorText);
-      return response
-        .status(502)
-        .json({ error: "OpenAI request failed", detail: errorText || aiResponse.statusText });
+      const error = new Error("OpenAI request failed");
+      error.statusCode = 502;
+      error.detail = errorText;
+      throw error;
     }
 
     const data = await aiResponse.json();
     const content = data?.choices?.[0]?.message?.content;
     if (!content) {
-      return response.status(502).json({ error: "OpenAI returned an empty response" });
+      const error = new Error("OpenAI returned an empty response");
+      error.statusCode = 502;
+      throw error;
     }
 
     let parsed;
@@ -244,13 +222,11 @@ Rules:
       }
     } catch (error) {
       console.error("Failed to parse OpenAI JSON:", error, content);
-      return response.status(502).json({ error: "Invalid JSON from OpenAI" });
+      const err = new Error("Invalid JSON from OpenAI");
+      err.statusCode = 502;
+      throw err;
     }
 
-    return response.status(200).json({ preferences: parsed });
-  } catch (error) {
-    console.error("Enrichment handler failed:", error);
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return response.status(500).json({ error: message });
-  }
-}
+    return { preferences: parsed };
+  },
+});

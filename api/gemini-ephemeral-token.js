@@ -8,6 +8,9 @@
  * @see https://ai.google.dev/gemini-api/docs/ephemeral-tokens
  */
 
+import { createHandler } from './_core/createHandler.js';
+import { geminiTokenSchema } from './schemas/gemini-ephemeral-token.schema.js';
+
 // Rotate through multiple API keys
 const API_KEYS = [
   process.env.GEMINI_API_KEY,
@@ -27,22 +30,11 @@ function getNextKey() {
   return key;
 }
 
-export default async function handler(req, res) {
-  // CORS headers
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
-  try {
-    const { language = 'en-US' } = req.body || {};
+export default createHandler({
+  schema: geminiTokenSchema,
+  timeout: 5000,
+  handler: async ({ body, res }) => {
+    const { language } = body;
     
     const apiKey = getNextKey();
     
@@ -57,9 +49,12 @@ export default async function handler(req, res) {
     // POST https://generativelanguage.googleapis.com/v1beta/ephemeral-tokens
     // with appropriate configuration
     
-    // For now, return the WebSocket URL directly
-    // In production, implement proper ephemeral token generation
-    res.status(200).json({
+    // CORS headers
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    
+    return {
       success: true,
       wsUrl,
       language,
@@ -67,16 +62,9 @@ export default async function handler(req, res) {
       expiresIn: 3600, // 1 hour
       // For future ephemeral token implementation:
       // token: ephemeralToken,
-    });
-
-  } catch (error) {
-    console.error('Ephemeral token error:', error);
-    res.status(500).json({ 
-      error: 'Failed to generate ephemeral token',
-      message: error.message 
-    });
-  }
-}
+    };
+  },
+});
 
 export const config = {
   api: {
