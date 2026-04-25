@@ -4,6 +4,9 @@
  * This script validates that all required environment variables are present
  * and properly formatted before the application starts.
  * 
+ * SECURITY NOTE: API keys should NOT be prefixed with VITE_ because that exposes
+ * them to the browser bundle. Server-only keys should use process.env without the prefix.
+ * 
  * Usage:
  *   node scripts/validate-env.js
  * 
@@ -18,10 +21,15 @@ const requiredEnvVars = [
   'VITE_SUPABASE_ANON_KEY',
 ];
 
+// Server-only variables (NOT exposed to browser)
+const serverOnlyEnvVars = [
+  'GEMINI_API_KEY',     // NOT VITE_ prefixed - server only
+  'OPENAI_API_KEY',     // NOT VITE_ prefixed - server only
+  'FINNHUB_API_KEY',    // NOT VITE_ prefixed - server only
+];
+
 const optionalEnvVars = [
   'VITE_KYC_ENV',
-  'VITE_GEMINI_API_KEY',
-  'VITE_OPENAI_API_KEY',
   'VITE_FIREBASE_API_KEY',
   'PORT',
   'NODE_ENV',
@@ -81,8 +89,9 @@ function validateEnv() {
 
     const configStatus = {
       'Supabase': !!(process.env.VITE_SUPABASE_URL && process.env.VITE_SUPABASE_ANON_KEY),
-      'Gemini API': !!process.env.VITE_GEMINI_API_KEY,
-      'OpenAI API': !!process.env.VITE_OPENAI_API_KEY,
+      'Gemini API (server-only)': !!process.env.GEMINI_API_KEY,
+      'OpenAI API (server-only)': !!process.env.OPENAI_API_KEY,
+      'Finnhub API (server-only)': !!process.env.FINNHUB_API_KEY,
       'Firebase': !!process.env.VITE_FIREBASE_API_KEY,
     };
 

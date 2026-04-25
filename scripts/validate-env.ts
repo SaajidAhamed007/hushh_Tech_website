@@ -1,8 +1,11 @@
 /**
- * Environment Validation Script
+ * Environment Validation Script (TypeScript)
  * 
  * This script validates that all required environment variables are present
  * and properly formatted before the application starts.
+ * 
+ * SECURITY: API keys are moved to server-only variables (without VITE_ prefix)
+ * to prevent exposure in browser bundle. Only Supabase public keys are exposed.
  * 
  * Usage:
  *   npx ts-node scripts/validate-env.ts
@@ -17,7 +20,7 @@ import { z } from 'zod';
 
 // Define environment variable schema with Zod
 const envSchema = z.object({
-  // Supabase Configuration (Required for Backend)
+  // Backend-only Configuration (NOT exposed to browser)
   SUPABASE_URL: z
     .string()
     .url('SUPABASE_URL must be a valid URL')
@@ -28,14 +31,13 @@ const envSchema = z.object({
     .optional(),
 
   // Frontend Environment Variables (Vite - exposed to client)
+  // Only public, non-secret values should have VITE_ prefix
   VITE_SUPABASE_URL: z
     .string()
-    .url('VITE_SUPABASE_URL must be a valid URL')
-    .optional(),
+    .url('VITE_SUPABASE_URL must be a valid URL'),
   VITE_SUPABASE_ANON_KEY: z
     .string()
-    .min(1, 'VITE_SUPABASE_ANON_KEY cannot be empty')
-    .optional(),
+    .min(1, 'VITE_SUPABASE_ANON_KEY cannot be empty'),
   VITE_SUPABASE_REDIRECT_URL: z
     .string()
     .url('VITE_SUPABASE_REDIRECT_URL must be a valid URL')
@@ -56,33 +58,33 @@ const envSchema = z.object({
     .url('VITE_KYC_API_BASE must be a valid URL')
     .optional(),
 
-  // API Keys (Client-side - browser visible)
-  VITE_FINNHUB_API_KEY: z
+  // Server-only API Keys (NOT prefixed with VITE_ - backend only)
+  GEMINI_API_KEY: z
     .string()
-    .min(1, 'VITE_FINNHUB_API_KEY cannot be empty')
+    .min(1, 'GEMINI_API_KEY is required for server-side operations')
     .optional(),
-  VITE_GEMINI_API_KEY: z
-    .string()
-    .min(1, 'VITE_GEMINI_API_KEY cannot be empty')
-    .optional(),
-  VITE_GEMINI_API_KEY_FALLBACK_1: z
+  GEMINI_API_KEY_FALLBACK_1: z
     .string()
     .min(1)
     .optional(),
-  VITE_GEMINI_API_KEY_FALLBACK_2: z
+  GEMINI_API_KEY_FALLBACK_2: z
     .string()
     .min(1)
     .optional(),
-  VITE_GEMINI_API_KEY_FALLBACK_3: z
+  GEMINI_API_KEY_FALLBACK_3: z
     .string()
     .min(1)
     .optional(),
-  VITE_OPENAI_API_KEY: z
+  OPENAI_API_KEY: z
     .string()
-    .min(1, 'VITE_OPENAI_API_KEY cannot be empty')
+    .min(1, 'OPENAI_API_KEY is required for server-side operations')
+    .optional(),
+  FINNHUB_API_KEY: z
+    .string()
+    .min(1)
     .optional(),
 
-  // Firebase Configuration
+  // Firebase Configuration (Optional)
   VITE_FIREBASE_API_KEY: z
     .string()
     .min(1)
@@ -108,16 +110,6 @@ const envSchema = z.object({
     .min(1)
     .optional(),
 
-  // External Service URLs
-  VITE_N8N_WEBHOOK_URL: z
-    .string()
-    .url('VITE_N8N_WEBHOOK_URL must be a valid URL')
-    .optional(),
-  VITE_VOICE_AGENT_URL: z
-    .string()
-    .url('VITE_VOICE_AGENT_URL must be a valid URL')
-    .optional(),
-
   // Optional Client Configuration
   VITE_GUEST_MODE_ACCESS_TOKEN: z.string().optional(),
   VITE_MARKET_SUPABASE_URL: z
@@ -127,6 +119,14 @@ const envSchema = z.object({
   VITE_MARKET_SUPABASE_KEY: z
     .string()
     .min(1)
+    .optional(),
+  VITE_N8N_WEBHOOK_URL: z
+    .string()
+    .url('VITE_N8N_WEBHOOK_URL must be a valid URL')
+    .optional(),
+  VITE_VOICE_AGENT_URL: z
+    .string()
+    .url('VITE_VOICE_AGENT_URL must be a valid URL')
     .optional(),
   VITE_KYC_TEST_BANK_IDS: z.string().optional(),
   VITE_ALLOW_INSECURE_BROWSER_LLM: z
@@ -201,10 +201,9 @@ function logValidationSummary(env: Environment): void {
     // Check which critical configs are present
     const configStatus = {
       'Supabase': !!(env.VITE_SUPABASE_URL && env.VITE_SUPABASE_ANON_KEY),
-      'Firebase': !!(env.VITE_FIREBASE_API_KEY && env.VITE_FIREBASE_PROJECT_ID),
-      'Gemini API': !!env.VITE_GEMINI_API_KEY,
-      'OpenAI API': !!env.VITE_OPENAI_API_KEY,
-      'Finnhub API': !!env.VITE_FINNHUB_API_KEY,
+      'Gemini API (server-only)': !!env.GEMINI_API_KEY,
+      'OpenAI API (server-only)': !!env.OPENAI_API_KEY,
+      'Finnhub API (server-only)': !!env.FINNHUB_API_KEY,
     };
 
     console.log('\nService Status:');

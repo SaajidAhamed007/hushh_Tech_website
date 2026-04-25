@@ -1416,6 +1416,112 @@ import { trace } from "@opentelemetry/api";
 
 ---
 
+## Security Architecture & Credential Management
+
+### API Key Isolation Strategy
+
+**Critical Security Pattern:** Sensitive credentials must NEVER be prefixed with `VITE_` because Vite automatically exposes all variables with this prefix to the browser bundle, making them visible in DevTools and network requests.
+
+**Current Implementation:**
+
+```javascript
+// ✅ CORRECT: Server-only environment variables (backend access only)
+const geminiApiKey = process.env.GEMINI_API_KEY;      // Backend only
+const openaiApiKey = process.env.OPENAI_API_KEY;      // Backend only
+const finnhubApiKey = process.env.FINNHUB_API_KEY;    // Backend only
+
+// ❌ INCORRECT: Browser-exposed keys (DO NOT USE)
+const key = import.meta.env.VITE_GEMINI_API_KEY;     // Exposed to browser!
+const key = import.meta.env.VITE_OPENAI_API_KEY;     // Exposed to browser!
+```
+
+### Ephemeral Token Pattern
+
+For client-facing operations requiring API access, use ephemeral tokens instead of master keys:
+
+**Gemini Token Endpoint Pattern:**
+```javascript
+// /api/gemini-ephemeral-token.js
+export default async function handler(req, res) {
+  try {
+    // Backend: Call Google API with master key
+    const response = await fetch('https://generativelanguage.googleapis.com/v1beta/openapi/createSession', {
+      method: 'POST',
+      headers: { 'x-goog-api-key': process.env.GEMINI_API_KEY },
+    });
+
+    const { name: sessionToken } = await response.json();
+    
+    // Frontend: Return only ephemeral token
+    res.json({
+      success: true,
+      data: { token: sessionToken, expiresIn: 3600 },
+      statusCode: 200,
+    });
+  } catch (error) {
+    // Error handling...
+  }
+}
+```
+
+This pattern ensures:
+- Master API key never leaves the backend
+- Client receives only time-limited ephemeral token
+- Frontend cannot access master credentials
+- Token expires automatically (short TTL)
+
+### Binary Endpoint Handling
+
+Binary endpoints (file downloads, wallet passes) must NOT use the `createHandler` wrapper because it's designed for JSON responses and conflicts with header-writing for streaming/binary data.
+
+**Correct Pattern for Binary Endpoints:**
+```javascript
+// api/wallet-pass.js - Binary endpoint (NOT using createHandler)
+export default async function handler(req, res) {
+  try {
+    // Validate input
+    const body = walletPassSchema.parse(req.body);
+    
+    // Generate binary file...
+    const buffer = Buffer.from(await forward.arrayBuffer());
+    
+    // Set headers and send binary
+    res.setHeader('Content-Type', 'application/vnd.apple.pkpass');
+    res.setHeader('Content-Disposition', 'attachment; filename="pass.pkpass"');
+    res.status(200).send(buffer);
+  } catch (error) {
+    // Return JSON error
+    res.status(500).json({ success: false, error: error.message });
+  }
+}
+```
+
+### Status Code Preservation in Error Handling
+
+The error handler MUST respect custom status codes from validation or business logic failures, not force all errors to HTTP 500:
+
+**Correct Error Handling:**
+```javascript
+// In createHandler error catch block:
+const statusCode = error.statusCode || 
+  (error.code === 'ZodError' ? 400 : 500);
+
+res.status(statusCode).json({
+  success: false,
+  error: error.message,
+  statusCode: statusCode,
+});
+```
+
+This ensures:
+- 400 Bad Request for validation errors
+- 401 Unauthorized for auth failures
+- 403 Forbidden for permission denials
+- 404 Not Found for missing resources
+- 500 Server Error only for unexpected failures
+
+---
+
 ## Known Limitations & Open Questions
 
 ### Current Constraints

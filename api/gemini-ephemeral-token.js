@@ -39,30 +39,47 @@ export default createHandler({
     const apiKey = getNextKey();
     
     // Generate ephemeral token from Google
-    // Note: This is a placeholder - actual implementation depends on Google's ephemeral token API
-    // Currently, for Gemini Live API preview, direct WebSocket connection with API key is used
+    // This requests a short-lived token from Google's API
+    // Never expose the master API key to the client
     
-    // Gemini Live API WebSocket URL
-    const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${apiKey}`;
-    
-    // For production with ephemeral tokens, you would call:
-    // POST https://generativelanguage.googleapis.com/v1beta/ephemeral-tokens
-    // with appropriate configuration
-    
-    // CORS headers
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-    
-    return {
-      success: true,
-      wsUrl,
-      language,
-      model: 'gemini-2.5-flash-native-audio-preview-12-2025',
-      expiresIn: 3600, // 1 hour
-      // For future ephemeral token implementation:
-      // token: ephemeralToken,
-    };
+    try {
+      const tokenResponse = await fetch(
+        'https://generativelanguage.googleapis.com/v1beta/ephemeral-tokens',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-goog-api-key': apiKey,
+          },
+          body: JSON.stringify({
+            model: 'models/gemini-2.0-flash',
+            expirationTime: new Date(Date.now() + 60 * 60 * 1000).toISOString(), // 1 hour
+          }),
+        }
+      );
+
+      if (!tokenResponse.ok) {
+        const error = new Error('Failed to generate ephemeral token');
+        error.statusCode = tokenResponse.status;
+        throw error;
+      }
+
+      const { token } = await tokenResponse.json();
+
+      // Return only the ephemeral token, never the master key
+      // Client uses this token for WebSocket connection
+      const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?token=${token}`;
+      
+      return {
+        token,
+        wsUrl,
+        expiresIn: 3600, // 1 hour in seconds
+        language,
+      };
+    } catch (error) {
+      // Let createHandler's error handler process this
+      throw error;
+    }
   },
 });
 

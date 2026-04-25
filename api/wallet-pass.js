@@ -1,9 +1,11 @@
 /**
  * Apple Wallet Pass Proxy
  * Forwards requests to upstream wallet service and returns pkpass binary file
+ * 
+ * NOTE: This endpoint is NOT wrapped in createHandler because it returns binary data (pkpass)
+ * The createHandler framework is designed for JSON responses and cannot handle streaming responses
  */
 
-import { createHandler } from './_core/createHandler.js';
 import { walletPassSchema } from './schemas/wallet-pass.schema.js';
 
 const UPSTREAM_APPLE_WALLET_ENDPOINT =
@@ -22,13 +24,18 @@ const resolvePayload = (body) => {
   return body;
 };
 
-export default createHandler({
-  schema: walletPassSchema,
-  timeout: 15000, // Wallet generation can take time
-  handler: async ({ body, res }) => {
+export default async function handler(req, res) {
+  try {
+    // Validate input using schema
+    const body = walletPassSchema.parse(req.body);
+    
     const payload = resolvePayload(body);
     if (!payload || typeof payload !== "object") {
-      throw new Error('Invalid wallet pass payload');
+      return res.status(400).json({
+        success: false,
+        error: "Invalid wallet pass payload",
+        statusCode: 400,
+      });
     }
 
     const forward = await fetch(UPSTREAM_APPLE_WALLET_ENDPOINT, {
@@ -39,10 +46,12 @@ export default createHandler({
 
     if (!forward.ok) {
       const text = await forward.text();
-      const error = new Error(`Wallet pass generation failed (${forward.status})`);
-      error.statusCode = forward.status;
-      error.details = text;
-      throw error;
+      return res.status(forward.status).json({
+        success: false,
+        error: `Wallet pass generation failed (${forward.status})`,
+        statusCode: forward.status,
+        details: text,
+      });
     }
 
     const buffer = Buffer.from(await forward.arrayBuffer());
@@ -60,10 +69,14 @@ export default createHandler({
     if (passSerial) res.setHeader("X-Pass-Serial", passSerial);
     if (passType) res.setHeader("X-Pass-Type", passType);
 
-    // Return buffer directly (Express will send it)
+    // Send binary response
     res.status(200).send(buffer);
-    
-    // Signal successful response to prevent automatic JSON response
-    return null;
-  },
-});
+  } catch (error) {
+    console.error("Wallet pass error:", error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || "Wallet pass generation failed",
+      statusCode: 500,
+    });
+  }
+}

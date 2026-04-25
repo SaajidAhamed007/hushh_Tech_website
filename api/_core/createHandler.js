@@ -33,7 +33,25 @@ export function createHandler({
         return errorResponse(res, error.message, 408);
       }
 
-      // Step 6: Generic fallback
+      // Step 6: Preserve custom status codes from handlers
+      if (error.statusCode && error.statusCode >= 400 && error.statusCode < 600) {
+        return errorResponse(res, error.message, error.statusCode);
+      }
+
+      // Step 7: Handle common HTTP error patterns
+      if (error.code === "AUTH_REQUIRED" || error.name === "AuthenticationError") {
+        return errorResponse(res, "Unauthorized", 401);
+      }
+
+      if (error.code === "NOT_FOUND" || error.name === "NotFoundError") {
+        return errorResponse(res, "Not found", 404);
+      }
+
+      if (error.code === "FORBIDDEN" || error.name === "ForbiddenError") {
+        return errorResponse(res, "Forbidden", 403);
+      }
+
+      // Step 8: Generic fallback
       return errorResponse(
         res,
         error.message || "Internal Server Error",
