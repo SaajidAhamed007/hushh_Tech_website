@@ -50,9 +50,9 @@ const envSchema = z.object({
     .default('development'),
   VITE_KYC_DEMO_MODE: z
     .string()
-    .transform((v) => v === 'true')
     .optional()
-    .default('false'),
+    .default('false')
+    .transform((v) => v === 'true'),
   VITE_KYC_API_BASE: z
     .string()
     .url('VITE_KYC_API_BASE must be a valid URL')
@@ -131,9 +131,9 @@ const envSchema = z.object({
   VITE_KYC_TEST_BANK_IDS: z.string().optional(),
   VITE_ALLOW_INSECURE_BROWSER_LLM: z
     .string()
-    .transform((v) => v === 'true')
     .optional()
-    .default('false'),
+    .default('false')
+    .transform((v) => v === 'true'),
 
   // Server Configuration
   PORT: z
