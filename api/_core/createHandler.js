@@ -35,7 +35,7 @@ export function createHandler({
 
       // Step 4: Handle validation errors properly
       if (error instanceof ZodError) {
-        return errorResponse(res, "Invalid request payload", 400);
+        return errorResponse(res, error.flatten().fieldErrors, 400);
       }
 
       // Step 5: Handle timeout errors

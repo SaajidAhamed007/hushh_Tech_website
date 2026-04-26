@@ -52,7 +52,7 @@ export default createHandler({
             'x-goog-api-key': apiKey,
           },
           body: JSON.stringify({
-            model: 'models/gemini-2.0-flash',
+            model: 'models/gemini-2.5-flash',
             expirationTime: new Date(Date.now() + 60 * 60 * 1000).toISOString(), // 1 hour
           }),
         }

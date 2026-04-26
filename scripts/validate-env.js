@@ -36,7 +36,8 @@ const optionalEnvVars = [
 ];
 
 function validateEnv() {
-  const missing = requiredEnvVars.filter(
+  const allRequired = [...requiredEnvVars, ...serverOnlyEnvVars];
+  const missing = allRequired.filter(
     (key) => !process.env[key] || process.env[key].trim() === ''
   );
 
