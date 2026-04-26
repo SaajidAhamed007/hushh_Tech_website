@@ -39,7 +39,7 @@ export function createHandler({
       }
 
       // Step 5: Handle timeout errors
-      if (error.message === "Request timed out") {
+      if (error.name === "TimeoutError") {
         return errorResponse(res, "Request timeout", 408);
       }
 

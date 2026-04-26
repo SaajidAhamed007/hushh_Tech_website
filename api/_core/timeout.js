@@ -1,7 +1,9 @@
 export function withTimeout(promise, ms) {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
-      reject(new Error("Request timed out"));
+      const timeoutError = new Error("Request timed out");
+      timeoutError.name = "TimeoutError";
+      reject(timeoutError);
     }, ms);
 
     promise

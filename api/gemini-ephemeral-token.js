@@ -14,9 +14,9 @@ import { geminiTokenSchema } from './schemas/gemini-ephemeral-token.schema.js';
 // Rotate through multiple API keys
 const API_KEYS = [
   process.env.GEMINI_API_KEY,
-  process.env.GEMINI_API_KEY_2,
-  process.env.GEMINI_API_KEY_3,
-  process.env.GEMINI_API_KEY_4,
+  process.env.GEMINI_API_KEY_FALLBACK_1,
+  process.env.GEMINI_API_KEY_FALLBACK_2,
+  process.env.GEMINI_API_KEY_FALLBACK_3,
 ].filter(Boolean);
 
 let keyIndex = 0;

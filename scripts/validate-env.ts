@@ -17,6 +17,7 @@
  */
 
 import { z } from 'zod';
+import { fileURLToPath } from 'url';
 
 // Define environment variable schema with Zod
 const envSchema = z.object({
@@ -231,7 +232,7 @@ export function validate(): Environment {
 }
 
 // Run validation if this script is executed directly
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
   validate();
 }
 

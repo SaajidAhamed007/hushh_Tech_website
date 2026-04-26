@@ -413,7 +413,7 @@ export default async function handler(req, res) {
     body = validated;
   } catch (error) {
     console.error("Google Wallet validation error:", error);
-    return res.status(400).json({ error: "Invalid request payload" });
+    return res.status(400).json({ success: false, error: "Invalid request payload" });
   }
 
   try {
